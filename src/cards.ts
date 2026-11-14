@@ -217,7 +217,10 @@ export function contentFromResult(result: ToolResult, ref?: CardRef, fileMode = 
     const obj = (Array.isArray(payload) ? payload[0] : payload) as Record<string, unknown>;
     const nested = (obj?.card ?? obj?.document ?? obj) as Record<string, unknown>;
     out.text ??= pick(nested, TEXT_KEYS);
-    out.url ??= pick(nested, URL_KEYS);
+    // Kept as text unless it's a plain http(s) URL: it goes into the frontmatter.
+    const url = pick(nested, URL_KEYS)?.trim();
+    if (url && URL_ONLY.test(url)) out.url ??= url;
+    else out.text ??= url;
     out.title ??= pick(nested, TITLE_KEYS);
     out.fileName ??= pick(nested, FILENAME_KEYS);
     out.mimeType ??= pick(nested, MIME_KEYS);
