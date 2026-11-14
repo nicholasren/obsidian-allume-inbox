@@ -6,6 +6,7 @@
 
 import { McpClient, McpError, type JsonSchema, type ToolInfo, type ToolResult } from "./mcp";
 import { contentFromResult, extractCards, pick, resultPayload, type CardContent, type CardRef } from "./cards";
+import { redact } from "./redact";
 
 /** The id to pass to board_content for a sub-board card. */
 export function boardIdOf(c: CardRef): string {
@@ -69,23 +70,6 @@ function setSlot(args: Record<string, unknown>, slot: ArgSlot, value: string): v
 
 const BOARD_ID = ["board_id", "boardId", "board", "id", "document_id", "documentId", "doc_id"];
 const CARD_ID = ["card_id", "cardId", "card", "id", "document_id", "documentId", "doc_id"];
-const MOVE_CARD = ["card_id", "cardId", "card_ids", "cardIds", "ids", "id", "document_ids", "document_id", "documentId"];
-const MOVE_TARGET = [
-  "board_id",
-  "boardId",
-  "to_board_id",
-  "target_board_id",
-  "targetBoardId",
-  "destination_board_id",
-  "destination_id",
-  "destinationId",
-  "to",
-  "target",
-  "destination",
-  "parent_id",
-  "parentId",
-  "board",
-];
 const QUERY = ["query", "q", "text", "term", "search", "terms"];
 
 /** Arguments that ask card_content for the file rather than the summary. */
@@ -222,7 +206,7 @@ export class AllumeMcp implements AllumeSource {
       this.logger?.(`xx ${name} ${(e as Error).message}`);
       throw friendlyError(e);
     }
-    this.logger?.(`<- ${name}${res.isError ? " (error)" : ""} ${clip(JSON.stringify(res))}`);
+    this.logger?.(`<- ${name}${res.isError ? " (error)" : ""} ${clip(JSON.stringify(redact(res)))}`);
     if (res.isError) throw friendlyError(new Error(errorText(res)));
     return res;
   }
@@ -334,7 +318,7 @@ export class AllumeMcp implements AllumeSource {
 
   async cardFile(ref: CardRef): Promise<CardContent> {
     if (!fileModeArgs(this.tool("card_content"))) return {};
-    return contentFromResult(await this.cardCall(ref, true), ref);
+    return contentFromResult(await this.cardCall(ref, true), ref, true);
   }
 
   async workspaces(): Promise<Record<string, unknown>[]> {

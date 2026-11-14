@@ -28,7 +28,7 @@ export class BoardPickerModal extends SuggestModal<BoardHit> {
   }
 
   onOpen(): void {
-    super.onOpen();
+    void super.onOpen();
     void this.load();
   }
 
@@ -240,11 +240,10 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
       )
       .addButton((b) =>
         b.setButtonText("Choose…").onClick(() =>
-          new BoardPickerModal(this.app, this.plugin, async (hit) => {
+          new BoardPickerModal(this.app, this.plugin, (hit) => {
             s.inboxBoardId = hit.id;
             s.inboxBoardName = hit.title;
-            await this.plugin.saveSettings();
-            this.display();
+            void this.plugin.saveSettings().then(() => this.display());
           }).open(),
         ),
       );
@@ -342,11 +341,10 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
         )
         .addButton((b) =>
           b.setButtonText("Choose…").onClick(() =>
-            new BoardPickerModal(this.app, this.plugin, async (hit) => {
+            new BoardPickerModal(this.app, this.plugin, (hit) => {
               s.syncedBoardId = hit.id;
               s.syncedBoardName = hit.title;
-              await this.plugin.saveSettings();
-              this.display();
+              void this.plugin.saveSettings().then(() => this.display());
             }).open(),
           ),
         );
@@ -400,11 +398,14 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
       .setName("Debug log")
-      .setDesc("Writes every request to Allume and its answer to debug.log in this plugin's folder. Turn on when reporting a problem.")
+      .setDesc(
+        "Writes each request to Allume and the shape of its answer to debug.log in this plugin's folder, inside your vault. Card text is replaced by its length. Turning this off deletes the log.",
+      )
       .addToggle((t) =>
         t.setValue(s.debugLog).onChange(async (v) => {
           s.debugLog = v;
           await this.plugin.saveSettings();
+          if (!v) await this.plugin.deleteDebugLog();
         }),
       );
     new Setting(containerEl)

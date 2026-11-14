@@ -4,7 +4,7 @@
 // responses, so everything here reads defensively: several candidate keys,
 // JSON or markdown-table payloads, text or binary content blocks.
 
-import type { ContentBlock, ToolResult } from "./mcp";
+import type { ToolResult } from "./mcp";
 
 export type CardKind = "text" | "url" | "file" | "board" | "other";
 
@@ -108,14 +108,14 @@ export function resultPayload(result: ToolResult): unknown {
 }
 
 function findList(payload: unknown, depth = 0): unknown[] | null {
-  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload)) return payload as unknown[];
   if (!payload || typeof payload !== "object" || depth > 3) return null;
   const rec = payload as Record<string, unknown>;
   for (const k of LIST_KEYS) {
     if (Array.isArray(rec[k])) return rec[k] as unknown[];
   }
   for (const v of Object.values(rec)) {
-    if (Array.isArray(v) && v.some((x) => x && typeof x === "object")) return v;
+    if (Array.isArray(v) && (v as unknown[]).some((x) => x && typeof x === "object")) return v as unknown[];
   }
   for (const v of Object.values(rec)) {
     const inner = findList(v, depth + 1);
@@ -184,11 +184,16 @@ function toLocalPath(p: string | undefined): string | undefined {
 
 const URL_ONLY = /^https?:\/\/\S+$/i;
 
-/** Merge everything useful out of a card_content result. */
-export function contentFromResult(result: ToolResult, ref?: CardRef): CardContent {
+/**
+ * Merge everything useful out of a card_content result. Only a file-mode
+ * answer may name a local file: a summary carries the card's own text, and a
+ * card whose text is "/Users/me/.ssh/id_ed25519" must not copy that file.
+ */
+export function contentFromResult(result: ToolResult, ref?: CardRef, fileMode = false): CardContent {
   const out: CardContent = {};
+  const localPath = (p: string | undefined) => (fileMode ? toLocalPath(p) : undefined);
 
-  for (const b of result.content as ContentBlock[]) {
+  for (const b of result.content) {
     if ((b.type === "image" || b.type === "audio") && b.data) {
       out.blob ??= decodeBase64(b.data);
       out.mimeType ??= b.mimeType;
@@ -199,9 +204,9 @@ export function contentFromResult(result: ToolResult, ref?: CardRef): CardConten
       } else if (b.resource.text && !out.text) {
         out.text = b.resource.text;
       }
-      out.filePath ??= toLocalPath(b.resource.uri);
+      out.filePath ??= localPath(b.resource.uri);
     } else if (b.type === "resource_link") {
-      out.filePath ??= toLocalPath(b.uri);
+      out.filePath ??= localPath(b.uri);
       out.fileName ??= b.name;
       out.mimeType ??= b.mimeType;
     }
@@ -212,18 +217,23 @@ export function contentFromResult(result: ToolResult, ref?: CardRef): CardConten
     const obj = (Array.isArray(payload) ? payload[0] : payload) as Record<string, unknown>;
     const nested = (obj?.card ?? obj?.document ?? obj) as Record<string, unknown>;
     out.text ??= pick(nested, TEXT_KEYS);
-    out.url ??= pick(nested, URL_KEYS);
+    // Kept as text unless it's a plain http(s) URL: it goes into the frontmatter.
+    const url = pick(nested, URL_KEYS)?.trim();
+    if (url && URL_ONLY.test(url)) out.url ??= url;
+    else out.text ??= url;
     out.title ??= pick(nested, TITLE_KEYS);
     out.fileName ??= pick(nested, FILENAME_KEYS);
     out.mimeType ??= pick(nested, MIME_KEYS);
-    out.filePath ??= toLocalPath(pick(nested, PATH_KEYS));
+    // Allume v4 stages the file for contents: file-uri at fetchedFile.uri.
+    out.filePath ??= localPath(pick(obj?.fetchedFile, ["uri"]));
+    out.filePath ??= localPath(pick(nested, PATH_KEYS));
     if (!out.blob) {
       const b64 = pick(nested, B64_KEYS);
       if (b64 && b64.length > 64) out.blob = decodeBase64(b64);
     }
   } else if (typeof payload === "string") {
     const s = payload.trim();
-    const asPath = toLocalPath(s);
+    const asPath = localPath(s);
     if (asPath && !s.includes("\n")) out.filePath ??= asPath;
     else if (URL_ONLY.test(s)) out.url ??= s;
     else out.text ??= s;

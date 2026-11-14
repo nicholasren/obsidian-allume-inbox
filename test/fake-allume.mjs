@@ -43,6 +43,10 @@ const boards = {
   ],
   "b-projects": [],
 };
+if (process.env.FAKE_PATH_NOTE) {
+  // A note whose whole text is a local path, returned as plain text the way a markdown summary is.
+  boards.inbox.push({ id: "c-path-1", type: "note", title: "", body: process.env.FAKE_PATH_NOTE, plain: true, created_at: "2026-11-14T00:07:00Z" });
+}
 const byId = () => Object.fromEntries(Object.values(boards).flat().map((c) => [c.id, c]));
 
 const tools = [
@@ -140,11 +144,17 @@ function cardResult(args) {
   if (args.contents === "file-uri" && c.bytes) {
     const p = join(tmp, c.filename || `${c.id}.${c.type === "image" ? "png" : "bin"}`);
     writeFileSync(p, c.bytes);
+    if (STYLE === "allume") {
+      // Real Allume v4: the staged file is a FetchedFile next to the document.
+      const mimeType = c.type === "image" ? "image/png" : "application/pdf";
+      return text({ id: `p-${c.id}`, kind: c.type, title: c.title, fetchedFile: { documentId: c.id, uri: `file://${p}` }, document: { documentType: c.type, id: c.id, title: c.title, fileName: c.filename, mimeType } });
+    }
     return text({ id: c.id, path: `file://${p}` });
   }
   if (args.contents === "raw" && c.bytes) {
     return { content: [{ type: "resource", resource: { uri: `allume://${c.id}`, mimeType: c.type === "image" ? "image/png" : "application/pdf", blob: c.bytes.toString("base64") } }] };
   }
+  if (c.plain) return text(c.body);
   return text({ id: c.id, type: c.type, title: c.title, body: c.body, url: c.url, filename: c.filename });
 }
 

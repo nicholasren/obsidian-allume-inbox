@@ -89,7 +89,7 @@ async function gatherContent(api: AllumeSource, ref: CardRef): Promise<CardConte
   if (ref.kind === "file") {
     // The summary may carry a title or file name. Its text can be OCR output,
     // so it is not used as a caption.
-    const extra = await api.cardContent(ref).catch(() => ({}) as CardContent);
+    const extra: CardContent = await api.cardContent(ref).catch(() => ({}));
     merged = {
       ...stripEmpty({ title: extra.title, fileName: extra.fileName, mimeType: extra.mimeType }),
       ...merged,

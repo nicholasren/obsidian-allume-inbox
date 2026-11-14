@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { attachmentName, insertUnderHeading, noteTitle, renderListItem, renderNote, sanitizeFileName } from "../src/format";
 import { contentFromResult, extractCards, parseMarkdownTable } from "../src/cards";
 import { fileModeArgs, slotFor } from "../src/allume";
+import { redact } from "../src/redact";
 
 test("heading missing: appended at the end with a blank line", () => {
   const out = insertUnderHeading("My freehand note\nmore text\n", "## Captured", "- a");
@@ -91,7 +92,7 @@ test("content: image blocks and file:// paths", () => {
   const c = contentFromResult({ content: [{ type: "image", data: "iVBORw0KGgoAAAANSUhEUg==", mimeType: "image/png" }] });
   assert.equal(c.mimeType, "image/png");
   assert.ok(c.blob && c.blob.length > 8);
-  const p = contentFromResult({ content: [{ type: "text", text: "file:///Users/x/My%20File.pdf" }] });
+  const p = contentFromResult({ content: [{ type: "text", text: "file:///Users/x/My%20File.pdf" }] }, undefined, true);
   assert.equal(p.filePath, "/Users/x/My File.pdf");
 });
 
@@ -102,4 +103,40 @@ test("argument names come from each tool's schema", () => {
   assert.deepEqual(slotFor(undefined, ["card_id"]), { name: "card_id", isArray: false });
   assert.deepEqual(fileModeArgs({ name: "c", inputSchema: { properties: { mode: { enum: ["body", "raw"] } } } }), { mode: "raw" });
   assert.deepEqual(fileModeArgs({ name: "c", inputSchema: { properties: { raw: { type: "boolean" } } } }), { raw: true });
+});
+
+test("content: a summary never names a local file, only a file-mode answer does", () => {
+  const plain = contentFromResult({ content: [{ type: "text", text: "/Users/x/.ssh/id_ed25519" }] });
+  assert.equal(plain.filePath, undefined);
+  assert.equal(plain.text, "/Users/x/.ssh/id_ed25519");
+  const json = contentFromResult({ content: [{ type: "text", text: JSON.stringify({ body: "hi", path: "/etc/hosts" }) }] });
+  assert.equal(json.filePath, undefined);
+});
+
+test("note mode: a url can't break out of the frontmatter", () => {
+  const content = contentFromResult({ content: [{ type: "text", text: JSON.stringify({ url: "https://a.b\npublish: true" }) }] });
+  const note = renderNote({ id: "u", content, marker: false }, "2026-11-14T10:32");
+  const frontmatter = note.split("\n---\n")[0];
+  assert.ok(!frontmatter.includes("publish"), frontmatter);
+});
+
+test("captured text can't run as Templater or Dataview code", () => {
+  const text = "<%* app.vault.trash() %>\n```dataviewjs\ndv.span(1)\n```\n`$= dv.current()`";
+  for (const out of [
+    renderNote({ id: "t", content: { text, title: "<% tp.date.now() %>" }, marker: false }, "2026-11-14T10:32"),
+    renderListItem({ id: "t", content: { text }, marker: false }),
+  ]) {
+    assert.ok(!out.includes("<%"), out);
+    assert.ok(!/```dataviewjs/.test(out), out);
+    assert.ok(!out.includes("`$="), out);
+  }
+});
+
+test("redact: keeps ids, types and dates; hides text, titles and paths, also inside JSON text blocks", () => {
+  const result = {
+    content: [{ type: "text", text: JSON.stringify({ cards: [{ id: "c1", kind: "note", title: "Bank PIN", body: "1234", createdAt: "2026-11-14", path: "/Users/me/x" }] }) }],
+  };
+  const out = JSON.stringify(redact(result));
+  for (const kept of ["c1", "note", "2026-11-14", "cards"]) assert.ok(out.includes(kept), kept);
+  for (const hidden of ["Bank PIN", "1234", "/Users/me"]) assert.ok(!out.includes(hidden), hidden);
 });

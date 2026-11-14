@@ -55,7 +55,9 @@ export function extFromBytes(b?: Uint8Array): string | undefined {
 export function sanitizeFileName(name: string, max = 80): string {
   const cleaned = name
     .replace(/[\\/:*?"<>|#^[\]]/g, " ")
-    .replace(/[\u0000-\u001f]/g, " ")
+    .split("")
+    .map((ch) => (ch.charCodeAt(0) < 32 ? " " : ch))
+    .join("")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\.+/, "");
@@ -104,6 +106,20 @@ export interface RenderInput {
   marker: boolean;
 }
 
+const ZWSP = "\u200B";
+
+/**
+ * Captured text comes from anyone who can post to the inbox, including
+ * collaborators in a shared workspace. Break the syntax that Templater (on file
+ * creation) and Dataview JS run as code, so a capture is only ever shown.
+ */
+export function inert(line: string): string {
+  return line
+    .replace(/<%/g, `<${ZWSP}%`)
+    .replace(/^(\s*(?:```|~~~)\s*)dataviewjs\b/i, "$1js")
+    .replace(/`\$=/g, `\`${ZWSP}$=`);
+}
+
 /** Lines in the body of a capture, without the bullet. */
 function bodyLines({ content, attachment }: RenderInput): string[] {
   const out: string[] = [];
@@ -124,7 +140,7 @@ function bodyLines({ content, attachment }: RenderInput): string[] {
   } else if (title) {
     out.push(title);
   }
-  return out;
+  return out.map(inert);
 }
 
 /** A capture as one list item, continuation lines indented under it. */

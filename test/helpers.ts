@@ -2,6 +2,7 @@ import { mkdtempSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readLocalFile } from "../src/files";
 import type { Ledger, SyncOptions, VaultIO } from "../src/sync";
 
 export const FAKE = join(dirname(fileURLToPath(import.meta.url)), "fake-allume.mjs");
@@ -27,9 +28,7 @@ export function tempVault(): { root: string; io: VaultIO; file: (p: string) => s
     async createBinary(p, data) {
       writeFileSync(abs(p), data);
     },
-    async readExternal(a) {
-      return new Uint8Array(readFileSync(a));
-    },
+    readExternal: (a) => readLocalFile(a),
     async attachmentPath(name) {
       let p = `assets/${name}`;
       for (let n = 1; existsSync(abs(p)); n++) p = `assets/${name.replace(/(\.\w+)$/, ` ${n}$1`)}`;

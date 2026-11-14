@@ -19,14 +19,15 @@ No AI model is involved and nothing leaves your Mac: the plugin talks to Allume'
 ## Requirements
 
 - macOS, with Allume for Mac **v4.0 or later**
-- Obsidian **desktop** 1.5 or later (the plugin doesn't run on mobile)
+- Obsidian **desktop** 1.5.7 or later (the plugin doesn't run on mobile)
 - Allume running while you sync. The plugin can launch it in the background for you.
 
 ## Set up
 
 1. **Turn on Allume's MCP server.** In Allume, open **Preferences → MCP** and switch it on. Choose **read-write** if you want synced cards moved out of your inbox. **Read-only** works too, but then cards stay where they are.
 2. **Install the plugin.**
-   - Before it's in the community list, install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat): *Add beta plugin* → this repository's URL.
+   - From Obsidian: *Settings → Community plugins → Browse*, search for **Allume Inbox**. (Pending review; until it's listed, use BRAT below.)
+   - With [BRAT](https://github.com/TfTHacker/obsidian42-brat): *Add beta plugin* → `nicholasren/obsidian-allume-inbox`.
    - Or manually: download `main.js`, `manifest.json` and `styles.css` from the latest release into `<your vault>/.obsidian/plugins/allume-inbox/`, then enable **Allume Inbox** in *Settings → Community plugins*.
 3. **Connect.** In *Settings → Allume Inbox*, click **Test**. If the helper isn't found, click **Detect**, or paste the path shown in Allume → Preferences → MCP.
 4. **Pick what to sync.** By default the plugin reads Allume's built-in **Inbox** (the one in Allume's sidebar, where quick captures from your phone land), in every workspace. Set *Workspace* to sync just one. Or set *Source* to **A board** and type a board's name.
@@ -77,7 +78,7 @@ A card is only removed or moved after it has been written to your vault. Switchi
 | Sync now | Pulls new cards immediately. Also on the ribbon icon and the status bar. |
 | Preview next sync | Shows exactly what would be written, without writing anything. |
 | Choose inbox board | Searches your Allume boards (for Source: A board). |
-| Show raw Allume responses | Shows what Allume's MCP tools returned, for bug reports. Copy it into an issue. |
+| Show raw Allume responses | Shows the shape of what Allume's MCP tools returned, for bug reports. Card text, titles and names are replaced by their length. Read it before you post it in an issue. |
 
 ## Troubleshooting
 
@@ -90,19 +91,30 @@ A card is only removed or moved after it has been written to your vault. Switchi
 | Phone captures arrive late | Allume syncs your phone to your Mac through its own service, and the Mac app has to be open to receive them. Open Allume on your phone for a moment after capturing. |
 | Something looks wrong | Run **Show raw Allume responses**, copy the output and open an issue. Allume documents its MCP tool names but not the shape of their responses, so new Allume releases can need small fixes here. |
 
-## Privacy
+## Disclosures
 
-- Everything stays on your Mac. The plugin starts Allume's local helper and reads its output; it makes no network requests.
-- Allume's MCP server can see every workspace and board; there's no per-board permission. The plugin only reads the inbox board you choose, and moves cards only if you ask it to.
+- **Requires a third-party app.** You need [Allume](https://allume.com) for Mac (version 4.0 or later). Allume's own account and pricing apply.
+- **No network use.** The plugin makes no network requests and has no telemetry. It talks only to Allume's local helper on your Mac.
+- **Runs a local program.** It starts Allume's helper (`allume-cli mcp`) and, if you turn on *Launch Allume if needed*, opens Allume with `open -a Allume`.
+- **Reads files outside your vault.** To copy an attachment, it reads the file Allume names when asked for that card's file, then saves a copy into your vault. It never reads a path written in a card's text. Files over 256 MB are skipped.
+- **Changes data in Allume only if you ask.** With *After sync* set to *Remove* or *Move*, it soft-deletes or moves cards in Allume after they are saved in your vault.
+- **Captured text is never run.** Templater commands (`<% %>`) and Dataview JS (`dataviewjs` blocks, inline `$=`) in a capture are changed so they don't run. Anyone who can post to a shared Inbox can write a capture.
+- **Debug log.** When turned on, it writes Allume's requests and the shape of its responses to `debug.log` in the plugin's folder, inside your vault. Card text is replaced by its length. Turning it off deletes the log. It's off by default.
+- Allume's MCP server can see every workspace and board; there's no per-board permission. The plugin reads the source you choose: by default, the Inbox of every workspace. To find a board by name, it also reads board titles and search results across your workspaces.
 
 ## Development
 
+Everything goes through `./go`:
+
 ```bash
-npm install
-npm test          # unit and end-to-end tests against a fake Allume MCP server
-npm run build     # type-check and bundle main.js
-npm run dev       # rebuild on change
+./go setup                 # install dependencies
+./go check                 # lint + tests + build
+./go install ~/MyVault     # build and copy into a vault for manual testing
+./go release patch         # bump, check, commit, tag, push, GitHub release
+./go help                  # all commands
 ```
+
+Releases need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`). The tag always equals the manifest version (no `v` prefix), as Obsidian requires.
 
 `test/fake-allume.mjs` is a stand-in for `allume-cli mcp`. Its argument names deliberately differ from the plugin's first guesses: the plugin reads each tool's input schema at runtime and maps arguments from that.
 

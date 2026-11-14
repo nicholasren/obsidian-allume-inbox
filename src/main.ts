@@ -1,13 +1,15 @@
 import { Notice, Plugin, moment, normalizePath, setIcon, type TFile } from "obsidian";
 import { execFile } from "child_process";
-import { existsSync, promises as fsp } from "fs";
+import { existsSync } from "fs";
 import { AllumeError, AllumeMcp, friendlyError } from "./allume";
 import { resultPayload } from "./cards";
+import { readLocalFile } from "./files";
+import { redact } from "./redact";
 import { DEFAULT_SETTINGS, HELPER_CANDIDATES, LEDGER_CAP, type AllumeInboxSettings } from "./settings";
 import { runSync, type Ledger, type SyncOptions, type SyncReport, type VaultIO } from "./sync";
 import { AllumeInboxSettingTab, BoardPickerModal, TextModal } from "./ui";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
 export default class AllumeInboxPlugin extends Plugin {
   settings!: AllumeInboxSettings;
@@ -32,11 +34,11 @@ export default class AllumeInboxPlugin extends Plugin {
       id: "choose-board",
       name: "Choose inbox board",
       callback: () =>
-        new BoardPickerModal(this.app, this, async (hit) => {
+        new BoardPickerModal(this.app, this, (hit) => {
           this.settings.inboxBoardId = hit.id;
           this.settings.inboxBoardName = hit.title;
-          await this.saveSettings();
-          new Notice(`Allume inbox: ${hit.title}`);
+          this.settings.source = "board";
+          void this.saveSettings().then(() => new Notice(`Allume inbox: ${hit.title}`));
         }).open(),
     });
     this.addCommand({ id: "debug-dump", name: "Show raw Allume responses", callback: () => void this.debugDump() });
@@ -58,7 +60,8 @@ export default class AllumeInboxPlugin extends Plugin {
   // ------------------------------------------------------------ settings
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = (await this.loadData()) as Partial<AllumeInboxSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     if (!existsSync(this.settings.helperPath)) {
       const found = this.detectHelper();
       if (found) this.settings.helperPath = found;
@@ -85,7 +88,12 @@ export default class AllumeInboxPlugin extends Plugin {
 
   dailyNoteConfig(): { folder: string; format: string } {
     // The core Daily notes plugin keeps its options on its instance.
-    const internal = (this.app as unknown as { internalPlugins?: { getPluginById?: (id: string) => any } }).internalPlugins;
+    interface DailyNotesPlugin {
+      enabled?: boolean;
+      instance?: { options?: { folder?: string; format?: string } };
+    }
+    const internal = (this.app as unknown as { internalPlugins?: { getPluginById?: (id: string) => DailyNotesPlugin | undefined } })
+      .internalPlugins;
     const dn = internal?.getPluginById?.("daily-notes");
     const o = dn?.enabled ? dn.instance?.options : undefined;
     return {
@@ -113,6 +121,13 @@ export default class AllumeInboxPlugin extends Plugin {
   log(line: string): void {
     if (!this.settings.debugLog) return;
     this.logLines.push(`${moment().format("YYYY-MM-DD HH:mm:ss")} ${line}`);
+  }
+
+  async deleteDebugLog(): Promise<void> {
+    this.logLines = [];
+    if (!this.manifest.dir) return;
+    const path = normalizePath(`${this.manifest.dir}/debug.log`);
+    if (await this.app.vault.adapter.exists(path)) await this.app.vault.adapter.remove(path);
   }
 
   /** Write buffered log lines to <plugin folder>/debug.log, keeping it under ~1 MB. */
@@ -227,7 +242,7 @@ export default class AllumeInboxPlugin extends Plugin {
         `Allume said: ${(lastErr as Error).message}. Workaround: set Source to “A board”.`,
       );
     }
-    if (!ok && lastErr) throw lastErr;
+    if (!ok && lastErr) throw friendlyError(lastErr);
     return total;
   }
 
@@ -323,7 +338,7 @@ export default class AllumeInboxPlugin extends Plugin {
         const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
         await vault.createBinary(normalizePath(p), buf);
       },
-      readExternal: async (abs) => new Uint8Array(await fsp.readFile(abs)),
+      readExternal: (abs) => readLocalFile(abs),
       attachmentPath: (name, source) => this.app.fileManager.getAvailablePathForAttachment(name, source),
       ensureFolder,
     };
@@ -443,12 +458,12 @@ export default class AllumeInboxPlugin extends Plugin {
           }
           out.inbox = { name: this.settings.inboxBoardName, id: this.settings.inboxBoardId };
           try {
-            out.search_for_name = truncate(await api.search(this.settings.inboxBoardName || "Inbox", 20));
+            out.search_for_name = await api.search(this.settings.inboxBoardName || "Inbox", 20);
           } catch (e) {
             out.search_error = (e as Error).message;
           }
           try {
-            out.list_workspaces = truncate(resultPayload(await api.call("list_workspaces", {})));
+            out.list_workspaces = resultPayload(await api.call("list_workspaces", {}));
           } catch (e) {
             out.list_workspaces_error = (e as Error).message;
           }
@@ -470,13 +485,14 @@ export default class AllumeInboxPlugin extends Plugin {
           const sample = [];
           for (const c of cards.filter((x) => x.kind !== "board").slice(0, 3)) {
             const a = api.cardContentArgs(c.id);
-            sample.push({ card: c.id, args: a, result: truncate(resultPayload(await api.call("card_content", a))) });
+            sample.push({ card: c.id, args: a, result: resultPayload(await api.call("card_content", a)) });
           }
           out.card_content_samples = sample;
         }
-        return JSON.stringify(out, null, 2);
+        const { plugin, server, tools, ...found } = out;
+        return JSON.stringify({ plugin, server, tools, ...(redact(found) as Record<string, unknown>) }, null, 2);
       });
-      new TextModal(this.app, "Raw Allume responses", text).open();
+      new TextModal(this.app, "Allume responses (card text hidden)", text).open();
     } catch (e) {
       this.notifyError(friendlyError(e), 10_000);
     }
@@ -496,10 +512,4 @@ export default class AllumeInboxPlugin extends Plugin {
   private notifyError(err: AllumeError, timeout: number): void {
     new Notice(`Allume Inbox: ${err.message}${err.hint ? `\n${err.hint}` : ""}`, timeout);
   }
-}
-
-function truncate(v: unknown): unknown {
-  const s = JSON.stringify(v);
-  if (s && s.length > 4000) return `${s.slice(0, 4000)}… (${s.length} chars)`;
-  return v;
 }

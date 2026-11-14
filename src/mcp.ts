@@ -45,14 +45,31 @@ export class McpError extends Error {
 interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: number;
 }
+
+interface RpcMessage {
+  jsonrpc?: string;
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code?: number; message?: string; data?: unknown };
+}
+
+// window timers inside Obsidian (popout-safe); globalThis under Node tests.
+const host = (typeof window !== "undefined" ? window : globalThis) as unknown as {
+  setTimeout(fn: () => void, ms: number): number;
+  clearTimeout(id: number): void;
+};
 
 export interface McpClientOptions {
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
   clientName?: string;
   clientVersion?: string;
+  /** A longer message from the helper fails the pending requests. */
+  maxMessageChars?: number;
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -82,6 +99,11 @@ export class McpClient {
     return this.opts.timeoutMs ?? 30_000;
   }
 
+  // Room for a 256 MB attachment sent as base64.
+  private get maxMessageChars(): number {
+    return this.opts.maxMessageChars ?? 400_000_000;
+  }
+
   async start(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -94,7 +116,7 @@ export class McpClient {
       proc.stderr.setEncoding("utf8");
       proc.stdout.on("data", (chunk: string) => this.onData(chunk));
       proc.stderr.on("data", (chunk: string) => {
-        this.stderrTail = (this.stderrTail + chunk).slice(-4000);
+        this.stderrTail = (this.stderrTail + chunk).slice(-500);
       });
       proc.on("error", (err: NodeJS.ErrnoException) => {
         const e =
@@ -170,7 +192,7 @@ export class McpClient {
         /* ignore */
       }
       const p = this.proc;
-      setTimeout(() => {
+      host.setTimeout(() => {
         if (!this.exited) p.kill();
       }, 500);
     }
@@ -182,7 +204,7 @@ export class McpClient {
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = host.setTimeout(() => {
         this.pending.delete(id);
         reject(new McpError(`Timed out waiting for Allume (${method})`, -32003));
       }, this.timeoutMs);
@@ -203,26 +225,35 @@ export class McpClient {
     this.buffer += chunk;
     let nl: number;
     while ((nl = this.buffer.indexOf("\n")) >= 0) {
+      if (nl > this.maxMessageChars) return this.overflow();
       const line = this.buffer.slice(0, nl).trim();
       this.buffer = this.buffer.slice(nl + 1);
       if (!line) continue;
-      let msg: any;
+      let msg: RpcMessage;
       try {
-        msg = JSON.parse(line);
+        msg = JSON.parse(line) as RpcMessage;
       } catch {
         continue; // stray log line on stdout; ignore
       }
       this.onMessage(msg);
     }
+    if (this.buffer.length > this.maxMessageChars) this.overflow();
   }
 
-  private onMessage(msg: any): void {
+  private overflow(): void {
+    this.buffer = "";
+    this.failAll(new McpError(`Allume sent a message too large to read (over ${this.maxMessageChars} characters)`, -32004));
+    this.proc?.kill();
+  }
+
+  private onMessage(msg: RpcMessage): void {
     // Response to one of our requests
     if (msg && msg.id !== undefined && msg.method === undefined) {
-      const p = this.pending.get(msg.id);
+      const id = Number(msg.id);
+      const p = this.pending.get(id);
       if (!p) return;
-      this.pending.delete(msg.id);
-      clearTimeout(p.timer);
+      this.pending.delete(id);
+      host.clearTimeout(p.timer);
       if (msg.error) {
         p.reject(new McpError(msg.error.message ?? "MCP error", msg.error.code, msg.error.data));
       } else {
@@ -249,7 +280,7 @@ export class McpClient {
 
   private failAll(err: Error): void {
     for (const [id, p] of this.pending) {
-      clearTimeout(p.timer);
+      host.clearTimeout(p.timer);
       p.reject(err);
       this.pending.delete(id);
     }
