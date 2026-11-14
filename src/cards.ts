@@ -224,6 +224,8 @@ export function contentFromResult(result: ToolResult, ref?: CardRef, fileMode = 
     out.title ??= pick(nested, TITLE_KEYS);
     out.fileName ??= pick(nested, FILENAME_KEYS);
     out.mimeType ??= pick(nested, MIME_KEYS);
+    // Allume v4 stages the file for contents: file-uri at fetchedFile.uri.
+    out.filePath ??= localPath(pick(obj?.fetchedFile, ["uri"]));
     out.filePath ??= localPath(pick(nested, PATH_KEYS));
     if (!out.blob) {
       const b64 = pick(nested, B64_KEYS);
