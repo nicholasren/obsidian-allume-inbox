@@ -1,14 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AllumeMcp } from "../src/allume";
+import { readLocalFile } from "../src/files";
+import { McpClient } from "../src/mcp";
 import { runSync } from "../src/sync";
 import { FAKE, memLedger, opts, tempVault } from "./helpers";
 
-async function connect(env: Record<string, string> = {}) {
-  Object.assign(process.env, { FAKE_READONLY: "", FAKE_STYLE: "json", FAKE_FILEMODE: "", FAKE_SEARCH: "", FAKE_INBOX: "", ...env });
-  return AllumeMcp.connect(FAKE, 10_000);
+async function connect(env: Record<string, string> = {}, logger: ((line: string) => void) | null = null) {
+  Object.assign(process.env, { FAKE_READONLY: "", FAKE_STYLE: "json", FAKE_FILEMODE: "", FAKE_SEARCH: "", FAKE_INBOX: "", FAKE_PATH_NOTE: "", ...env });
+  return AllumeMcp.connect(FAKE, 10_000, "0.0.0", logger);
 }
 
 test("daily mode: everything lands under ## Captured, files in assets, no duplicates on re-run", async () => {
@@ -270,3 +273,52 @@ for (const mode of ["tool", "card", "root"]) {
     }
   });
 }
+
+test("a note whose text is a local file path is saved as text, and that file is not copied", async () => {
+  const secret = join(mkdtempSync(join(tmpdir(), "secret-")), "id_ed25519");
+  writeFileSync(secret, "PRIVATE KEY");
+  const api = await connect({ FAKE_PATH_NOTE: secret });
+  const v = tempVault();
+  try {
+    const r = await runSync(api, v.io, memLedger(), opts());
+    assert.deepEqual(r.errors, []);
+    assert.ok(v.file("Journals/2026-11-14.md").includes(`- ${secret} %%allume:c-path-1%%`));
+    const copied = readdirSync(join(v.root, "assets")).map((f) => readFileSync(join(v.root, "assets", f), "utf8"));
+    assert.ok(!copied.some((t) => t.includes("PRIVATE KEY")));
+  } finally {
+    api.close();
+  }
+});
+
+test("the debug log keeps ids and shapes but not card text", async () => {
+  const lines: string[] = [];
+  const api = await connect({}, (l) => lines.push(l));
+  try {
+    await runSync(api, tempVault().io, memLedger(), opts({ dryRun: true }));
+    const log = lines.join("\n");
+    assert.match(log, /c-note-2/);
+    for (const text of ["milk", "Shopping", "whiteboard", "allume.com/cli-setup", "Idea: capture"]) {
+      assert.ok(!log.includes(text), `log contains “${text}”`);
+    }
+  } finally {
+    api.close();
+  }
+});
+
+test("attachments are read only from regular files under the size limit", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "files-"));
+  const small = join(dir, "small.bin");
+  writeFileSync(small, "abc");
+  assert.deepEqual([...(await readLocalFile(small, 10))], [97, 98, 99]);
+  const big = join(dir, "big.bin");
+  writeFileSync(big, "");
+  truncateSync(big, 11);
+  await assert.rejects(readLocalFile(big, 10), /too large/);
+  mkdirSync(join(dir, "sub"));
+  await assert.rejects(readLocalFile(join(dir, "sub"), 10), /not a file/);
+  await assert.rejects(readLocalFile("/dev/zero", 10), /not a file/);
+});
+
+test("an oversized message from the helper fails the request instead of growing without limit", async () => {
+  await assert.rejects(McpClient.connect(FAKE, [], { maxMessageChars: 50 }), /too large/);
+});
