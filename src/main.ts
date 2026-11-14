@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, HELPER_CANDIDATES, LEDGER_CAP, type AllumeInboxSettin
 import { runSync, type Ledger, type SyncOptions, type SyncReport, type VaultIO } from "./sync";
 import { AllumeInboxSettingTab, BoardPickerModal, TextModal } from "./ui";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
 export default class AllumeInboxPlugin extends Plugin {
   settings!: AllumeInboxSettings;
@@ -32,11 +32,11 @@ export default class AllumeInboxPlugin extends Plugin {
       id: "choose-board",
       name: "Choose inbox board",
       callback: () =>
-        new BoardPickerModal(this.app, this, async (hit) => {
+        new BoardPickerModal(this.app, this, (hit) => {
           this.settings.inboxBoardId = hit.id;
           this.settings.inboxBoardName = hit.title;
-          await this.saveSettings();
-          new Notice(`Allume inbox: ${hit.title}`);
+          this.settings.source = "board";
+          void this.saveSettings().then(() => new Notice(`Allume inbox: ${hit.title}`));
         }).open(),
     });
     this.addCommand({ id: "debug-dump", name: "Show raw Allume responses", callback: () => void this.debugDump() });
@@ -58,7 +58,8 @@ export default class AllumeInboxPlugin extends Plugin {
   // ------------------------------------------------------------ settings
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const saved = (await this.loadData()) as Partial<AllumeInboxSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     if (!existsSync(this.settings.helperPath)) {
       const found = this.detectHelper();
       if (found) this.settings.helperPath = found;
@@ -85,7 +86,12 @@ export default class AllumeInboxPlugin extends Plugin {
 
   dailyNoteConfig(): { folder: string; format: string } {
     // The core Daily notes plugin keeps its options on its instance.
-    const internal = (this.app as unknown as { internalPlugins?: { getPluginById?: (id: string) => any } }).internalPlugins;
+    interface DailyNotesPlugin {
+      enabled?: boolean;
+      instance?: { options?: { folder?: string; format?: string } };
+    }
+    const internal = (this.app as unknown as { internalPlugins?: { getPluginById?: (id: string) => DailyNotesPlugin | undefined } })
+      .internalPlugins;
     const dn = internal?.getPluginById?.("daily-notes");
     const o = dn?.enabled ? dn.instance?.options : undefined;
     return {
@@ -227,7 +233,7 @@ export default class AllumeInboxPlugin extends Plugin {
         `Allume said: ${(lastErr as Error).message}. Workaround: set Source to “A board”.`,
       );
     }
-    if (!ok && lastErr) throw lastErr;
+    if (!ok && lastErr) throw friendlyError(lastErr);
     return total;
   }
 

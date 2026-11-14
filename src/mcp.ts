@@ -45,8 +45,23 @@ export class McpError extends Error {
 interface Pending {
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: number;
 }
+
+interface RpcMessage {
+  jsonrpc?: string;
+  id?: number | string;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code?: number; message?: string; data?: unknown };
+}
+
+// window timers inside Obsidian (popout-safe); globalThis under Node tests.
+const host = (typeof window !== "undefined" ? window : globalThis) as unknown as {
+  setTimeout(fn: () => void, ms: number): number;
+  clearTimeout(id: number): void;
+};
 
 export interface McpClientOptions {
   timeoutMs?: number;
@@ -170,7 +185,7 @@ export class McpClient {
         /* ignore */
       }
       const p = this.proc;
-      setTimeout(() => {
+      host.setTimeout(() => {
         if (!this.exited) p.kill();
       }, 500);
     }
@@ -182,7 +197,7 @@ export class McpClient {
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = host.setTimeout(() => {
         this.pending.delete(id);
         reject(new McpError(`Timed out waiting for Allume (${method})`, -32003));
       }, this.timeoutMs);
@@ -206,9 +221,9 @@ export class McpClient {
       const line = this.buffer.slice(0, nl).trim();
       this.buffer = this.buffer.slice(nl + 1);
       if (!line) continue;
-      let msg: any;
+      let msg: RpcMessage;
       try {
-        msg = JSON.parse(line);
+        msg = JSON.parse(line) as RpcMessage;
       } catch {
         continue; // stray log line on stdout; ignore
       }
@@ -216,13 +231,14 @@ export class McpClient {
     }
   }
 
-  private onMessage(msg: any): void {
+  private onMessage(msg: RpcMessage): void {
     // Response to one of our requests
     if (msg && msg.id !== undefined && msg.method === undefined) {
-      const p = this.pending.get(msg.id);
+      const id = Number(msg.id);
+      const p = this.pending.get(id);
       if (!p) return;
-      this.pending.delete(msg.id);
-      clearTimeout(p.timer);
+      this.pending.delete(id);
+      host.clearTimeout(p.timer);
       if (msg.error) {
         p.reject(new McpError(msg.error.message ?? "MCP error", msg.error.code, msg.error.data));
       } else {
@@ -249,7 +265,7 @@ export class McpClient {
 
   private failAll(err: Error): void {
     for (const [id, p] of this.pending) {
-      clearTimeout(p.timer);
+      host.clearTimeout(p.timer);
       p.reject(err);
       this.pending.delete(id);
     }

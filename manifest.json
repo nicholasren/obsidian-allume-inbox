@@ -1,9 +1,9 @@
 {
   "id": "allume-inbox",
   "name": "Allume Inbox",
-  "version": "0.3.0",
-  "minAppVersion": "1.5.0",
-  "description": "Unofficial. Pulls cards from an Allume board (formerly Muse) into your vault through Allume's local MCP server: text, links, images and files. Mac only.",
+  "version": "0.3.1",
+  "minAppVersion": "1.5.7",
+  "description": "Sync captures from Allume (formerly Muse) into your vault: notes, links, images and files, through Allume's local MCP server. Unofficial; macOS only.",
   "author": "Nicholas Ren",
   "isDesktopOnly": true
 }

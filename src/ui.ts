@@ -28,7 +28,7 @@ export class BoardPickerModal extends SuggestModal<BoardHit> {
   }
 
   onOpen(): void {
-    super.onOpen();
+    void super.onOpen();
     void this.load();
   }
 
@@ -240,11 +240,10 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
       )
       .addButton((b) =>
         b.setButtonText("Choose…").onClick(() =>
-          new BoardPickerModal(this.app, this.plugin, async (hit) => {
+          new BoardPickerModal(this.app, this.plugin, (hit) => {
             s.inboxBoardId = hit.id;
             s.inboxBoardName = hit.title;
-            await this.plugin.saveSettings();
-            this.display();
+            void this.plugin.saveSettings().then(() => this.display());
           }).open(),
         ),
       );
@@ -342,11 +341,10 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
         )
         .addButton((b) =>
           b.setButtonText("Choose…").onClick(() =>
-            new BoardPickerModal(this.app, this.plugin, async (hit) => {
+            new BoardPickerModal(this.app, this.plugin, (hit) => {
               s.syncedBoardId = hit.id;
               s.syncedBoardName = hit.title;
-              await this.plugin.saveSettings();
-              this.display();
+              void this.plugin.saveSettings().then(() => this.display());
             }).open(),
           ),
         );

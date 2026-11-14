@@ -55,7 +55,9 @@ export function extFromBytes(b?: Uint8Array): string | undefined {
 export function sanitizeFileName(name: string, max = 80): string {
   const cleaned = name
     .replace(/[\\/:*?"<>|#^[\]]/g, " ")
-    .replace(/[\u0000-\u001f]/g, " ")
+    .split("")
+    .map((ch) => (ch.charCodeAt(0) < 32 ? " " : ch))
+    .join("")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\.+/, "");

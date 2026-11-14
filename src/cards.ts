@@ -4,7 +4,7 @@
 // responses, so everything here reads defensively: several candidate keys,
 // JSON or markdown-table payloads, text or binary content blocks.
 
-import type { ContentBlock, ToolResult } from "./mcp";
+import type { ToolResult } from "./mcp";
 
 export type CardKind = "text" | "url" | "file" | "board" | "other";
 
@@ -108,14 +108,14 @@ export function resultPayload(result: ToolResult): unknown {
 }
 
 function findList(payload: unknown, depth = 0): unknown[] | null {
-  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload)) return payload as unknown[];
   if (!payload || typeof payload !== "object" || depth > 3) return null;
   const rec = payload as Record<string, unknown>;
   for (const k of LIST_KEYS) {
     if (Array.isArray(rec[k])) return rec[k] as unknown[];
   }
   for (const v of Object.values(rec)) {
-    if (Array.isArray(v) && v.some((x) => x && typeof x === "object")) return v;
+    if (Array.isArray(v) && (v as unknown[]).some((x) => x && typeof x === "object")) return v as unknown[];
   }
   for (const v of Object.values(rec)) {
     const inner = findList(v, depth + 1);
@@ -188,7 +188,7 @@ const URL_ONLY = /^https?:\/\/\S+$/i;
 export function contentFromResult(result: ToolResult, ref?: CardRef): CardContent {
   const out: CardContent = {};
 
-  for (const b of result.content as ContentBlock[]) {
+  for (const b of result.content) {
     if ((b.type === "image" || b.type === "audio") && b.data) {
       out.blob ??= decodeBase64(b.data);
       out.mimeType ??= b.mimeType;

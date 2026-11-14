@@ -69,23 +69,6 @@ function setSlot(args: Record<string, unknown>, slot: ArgSlot, value: string): v
 
 const BOARD_ID = ["board_id", "boardId", "board", "id", "document_id", "documentId", "doc_id"];
 const CARD_ID = ["card_id", "cardId", "card", "id", "document_id", "documentId", "doc_id"];
-const MOVE_CARD = ["card_id", "cardId", "card_ids", "cardIds", "ids", "id", "document_ids", "document_id", "documentId"];
-const MOVE_TARGET = [
-  "board_id",
-  "boardId",
-  "to_board_id",
-  "target_board_id",
-  "targetBoardId",
-  "destination_board_id",
-  "destination_id",
-  "destinationId",
-  "to",
-  "target",
-  "destination",
-  "parent_id",
-  "parentId",
-  "board",
-];
 const QUERY = ["query", "q", "text", "term", "search", "terms"];
 
 /** Arguments that ask card_content for the file rather than the summary. */
