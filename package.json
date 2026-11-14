@@ -1,0 +1,22 @@
+{
+  "name": "allume-inbox",
+  "version": "0.3.0",
+  "description": "Obsidian plugin: sync an Allume inbox board into your vault over Allume's local MCP server.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "test": "node --import tsx --test test/*.test.ts",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.28.0",
+    "obsidian": "^1.8.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

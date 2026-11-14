@@ -1,0 +1,22 @@
+.allume-inbox-muted {
+  color: var(--text-muted);
+}
+
+.allume-inbox-pre {
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-smaller);
+  user-select: text;
+}
+
+.allume-inbox-icon {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.allume-inbox-icon svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
