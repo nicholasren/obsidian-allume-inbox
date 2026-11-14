@@ -184,9 +184,14 @@ function toLocalPath(p: string | undefined): string | undefined {
 
 const URL_ONLY = /^https?:\/\/\S+$/i;
 
-/** Merge everything useful out of a card_content result. */
-export function contentFromResult(result: ToolResult, ref?: CardRef): CardContent {
+/**
+ * Merge everything useful out of a card_content result. Only a file-mode
+ * answer may name a local file: a summary carries the card's own text, and a
+ * card whose text is "/Users/me/.ssh/id_ed25519" must not copy that file.
+ */
+export function contentFromResult(result: ToolResult, ref?: CardRef, fileMode = false): CardContent {
   const out: CardContent = {};
+  const localPath = (p: string | undefined) => (fileMode ? toLocalPath(p) : undefined);
 
   for (const b of result.content) {
     if ((b.type === "image" || b.type === "audio") && b.data) {
@@ -199,9 +204,9 @@ export function contentFromResult(result: ToolResult, ref?: CardRef): CardConten
       } else if (b.resource.text && !out.text) {
         out.text = b.resource.text;
       }
-      out.filePath ??= toLocalPath(b.resource.uri);
+      out.filePath ??= localPath(b.resource.uri);
     } else if (b.type === "resource_link") {
-      out.filePath ??= toLocalPath(b.uri);
+      out.filePath ??= localPath(b.uri);
       out.fileName ??= b.name;
       out.mimeType ??= b.mimeType;
     }
@@ -216,14 +221,14 @@ export function contentFromResult(result: ToolResult, ref?: CardRef): CardConten
     out.title ??= pick(nested, TITLE_KEYS);
     out.fileName ??= pick(nested, FILENAME_KEYS);
     out.mimeType ??= pick(nested, MIME_KEYS);
-    out.filePath ??= toLocalPath(pick(nested, PATH_KEYS));
+    out.filePath ??= localPath(pick(nested, PATH_KEYS));
     if (!out.blob) {
       const b64 = pick(nested, B64_KEYS);
       if (b64 && b64.length > 64) out.blob = decodeBase64(b64);
     }
   } else if (typeof payload === "string") {
     const s = payload.trim();
-    const asPath = toLocalPath(s);
+    const asPath = localPath(s);
     if (asPath && !s.includes("\n")) out.filePath ??= asPath;
     else if (URL_ONLY.test(s)) out.url ??= s;
     else out.text ??= s;

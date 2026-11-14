@@ -317,7 +317,7 @@ export class AllumeMcp implements AllumeSource {
 
   async cardFile(ref: CardRef): Promise<CardContent> {
     if (!fileModeArgs(this.tool("card_content"))) return {};
-    return contentFromResult(await this.cardCall(ref, true), ref);
+    return contentFromResult(await this.cardCall(ref, true), ref, true);
   }
 
   async workspaces(): Promise<Record<string, unknown>[]> {
