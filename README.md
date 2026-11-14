@@ -78,7 +78,7 @@ A card is only removed or moved after it has been written to your vault. Switchi
 | Sync now | Pulls new cards immediately. Also on the ribbon icon and the status bar. |
 | Preview next sync | Shows exactly what would be written, without writing anything. |
 | Choose inbox board | Searches your Allume boards (for Source: A board). |
-| Show raw Allume responses | Shows what Allume's MCP tools returned, for bug reports. Copy it into an issue. |
+| Show raw Allume responses | Shows the shape of what Allume's MCP tools returned, for bug reports. Card text, titles and names are replaced by their length. Read it before you post it in an issue. |
 
 ## Troubleshooting
 
@@ -96,10 +96,11 @@ A card is only removed or moved after it has been written to your vault. Switchi
 - **Requires a third-party app.** You need [Allume](https://allume.com) for Mac (version 4.0 or later). Allume's own account and pricing apply.
 - **No network use.** The plugin makes no network requests and has no telemetry. It talks only to Allume's local helper on your Mac.
 - **Runs a local program.** It starts Allume's helper (`allume-cli mcp`) and, if you turn on *Launch Allume if needed*, opens Allume with `open -a Allume`.
-- **Reads files outside your vault.** To copy an attachment, it reads the file Allume puts on disk for that card (in Allume's own storage), then saves a copy into your vault.
+- **Reads files outside your vault.** To copy an attachment, it reads the file Allume names when asked for that card's file, then saves a copy into your vault. It never reads a path written in a card's text. Files over 256 MB are skipped.
 - **Changes data in Allume only if you ask.** With *After sync* set to *Remove* or *Move*, it soft-deletes or moves cards in Allume after they are saved in your vault.
-- **Debug log.** When turned on, it writes Allume's requests and responses (including card content) to `debug.log` in the plugin's own folder. It's off by default.
-- Allume's MCP server can see every workspace and board; there's no per-board permission. The plugin only reads the source you choose.
+- **Captured text is never run.** Templater commands (`<% %>`) and Dataview JS (`dataviewjs` blocks, inline `$=`) in a capture are changed so they don't run. Anyone who can post to a shared Inbox can write a capture.
+- **Debug log.** When turned on, it writes Allume's requests and the shape of its responses to `debug.log` in the plugin's folder, inside your vault. Card text is replaced by its length. Turning it off deletes the log. It's off by default.
+- Allume's MCP server can see every workspace and board; there's no per-board permission. The plugin reads the source you choose: by default, the Inbox of every workspace. To find a board by name, it also reads board titles and search results across your workspaces.
 
 ## Development
 
