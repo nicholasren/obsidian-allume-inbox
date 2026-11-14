@@ -144,6 +144,11 @@ function cardResult(args) {
   if (args.contents === "file-uri" && c.bytes) {
     const p = join(tmp, c.filename || `${c.id}.${c.type === "image" ? "png" : "bin"}`);
     writeFileSync(p, c.bytes);
+    if (STYLE === "allume") {
+      // Real Allume v4: the staged file is a FetchedFile next to the document.
+      const mimeType = c.type === "image" ? "image/png" : "application/pdf";
+      return text({ id: `p-${c.id}`, kind: c.type, title: c.title, fetchedFile: { documentId: c.id, uri: `file://${p}` }, document: { documentType: c.type, id: c.id, title: c.title, fileName: c.filename, mimeType } });
+    }
     return text({ id: c.id, path: `file://${p}` });
   }
   if (args.contents === "raw" && c.bytes) {

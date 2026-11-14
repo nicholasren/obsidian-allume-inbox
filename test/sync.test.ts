@@ -252,7 +252,7 @@ test("real Allume shape: placement ids, document ids, card_content falls back to
     assert.deepEqual(r.errors, []);
     assert.equal(r.added.length, 5);
     assert.match(v.file("Journals/2026-11-14.md"), /- Idea: capture to Obsidian via MCP %%allume:p-c-note-1%%/);
-    assert.ok(existsSync(join(v.root, "assets")));
+    assert.deepEqual(readdirSync(join(v.root, "assets")).sort(), ["allume-2026-11-14-p-c-img--whiteboard.png", "allume-2026-11-14-p-c-pdf--spec.pdf"]);
   } finally {
     api.close();
   }
