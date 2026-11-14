@@ -1,8 +1,9 @@
 import { Notice, Plugin, moment, normalizePath, setIcon, type TFile } from "obsidian";
 import { execFile } from "child_process";
-import { existsSync, promises as fsp } from "fs";
+import { existsSync } from "fs";
 import { AllumeError, AllumeMcp, friendlyError } from "./allume";
 import { resultPayload } from "./cards";
+import { readLocalFile } from "./files";
 import { redact } from "./redact";
 import { DEFAULT_SETTINGS, HELPER_CANDIDATES, LEDGER_CAP, type AllumeInboxSettings } from "./settings";
 import { runSync, type Ledger, type SyncOptions, type SyncReport, type VaultIO } from "./sync";
@@ -337,7 +338,7 @@ export default class AllumeInboxPlugin extends Plugin {
         const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
         await vault.createBinary(normalizePath(p), buf);
       },
-      readExternal: async (abs) => new Uint8Array(await fsp.readFile(abs)),
+      readExternal: (abs) => readLocalFile(abs),
       attachmentPath: (name, source) => this.app.fileManager.getAvailablePathForAttachment(name, source),
       ensureFolder,
     };

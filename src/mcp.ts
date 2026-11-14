@@ -68,6 +68,8 @@ export interface McpClientOptions {
   env?: NodeJS.ProcessEnv;
   clientName?: string;
   clientVersion?: string;
+  /** A longer message from the helper fails the pending requests. */
+  maxMessageChars?: number;
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -97,6 +99,11 @@ export class McpClient {
     return this.opts.timeoutMs ?? 30_000;
   }
 
+  // Room for a 256 MB attachment sent as base64.
+  private get maxMessageChars(): number {
+    return this.opts.maxMessageChars ?? 400_000_000;
+  }
+
   async start(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       let settled = false;
@@ -109,7 +116,7 @@ export class McpClient {
       proc.stderr.setEncoding("utf8");
       proc.stdout.on("data", (chunk: string) => this.onData(chunk));
       proc.stderr.on("data", (chunk: string) => {
-        this.stderrTail = (this.stderrTail + chunk).slice(-4000);
+        this.stderrTail = (this.stderrTail + chunk).slice(-500);
       });
       proc.on("error", (err: NodeJS.ErrnoException) => {
         const e =
@@ -218,6 +225,7 @@ export class McpClient {
     this.buffer += chunk;
     let nl: number;
     while ((nl = this.buffer.indexOf("\n")) >= 0) {
+      if (nl > this.maxMessageChars) return this.overflow();
       const line = this.buffer.slice(0, nl).trim();
       this.buffer = this.buffer.slice(nl + 1);
       if (!line) continue;
@@ -229,6 +237,13 @@ export class McpClient {
       }
       this.onMessage(msg);
     }
+    if (this.buffer.length > this.maxMessageChars) this.overflow();
+  }
+
+  private overflow(): void {
+    this.buffer = "";
+    this.failAll(new McpError(`Allume sent a message too large to read (over ${this.maxMessageChars} characters)`, -32004));
+    this.proc?.kill();
   }
 
   private onMessage(msg: RpcMessage): void {
