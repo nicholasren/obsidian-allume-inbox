@@ -6,6 +6,7 @@
 
 import { McpClient, McpError, type JsonSchema, type ToolInfo, type ToolResult } from "./mcp";
 import { contentFromResult, extractCards, pick, resultPayload, type CardContent, type CardRef } from "./cards";
+import { redact } from "./redact";
 
 /** The id to pass to board_content for a sub-board card. */
 export function boardIdOf(c: CardRef): string {
@@ -205,7 +206,7 @@ export class AllumeMcp implements AllumeSource {
       this.logger?.(`xx ${name} ${(e as Error).message}`);
       throw friendlyError(e);
     }
-    this.logger?.(`<- ${name}${res.isError ? " (error)" : ""} ${clip(JSON.stringify(res))}`);
+    this.logger?.(`<- ${name}${res.isError ? " (error)" : ""} ${clip(JSON.stringify(redact(res)))}`);
     if (res.isError) throw friendlyError(new Error(errorText(res)));
     return res;
   }

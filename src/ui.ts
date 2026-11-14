@@ -398,11 +398,14 @@ export class AllumeInboxSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
       .setName("Debug log")
-      .setDesc("Writes every request to Allume and its answer to debug.log in this plugin's folder. Turn on when reporting a problem.")
+      .setDesc(
+        "Writes each request to Allume and the shape of its answer to debug.log in this plugin's folder, inside your vault. Card text is replaced by its length. Turning this off deletes the log.",
+      )
       .addToggle((t) =>
         t.setValue(s.debugLog).onChange(async (v) => {
           s.debugLog = v;
           await this.plugin.saveSettings();
+          if (!v) await this.plugin.deleteDebugLog();
         }),
       );
     new Setting(containerEl)

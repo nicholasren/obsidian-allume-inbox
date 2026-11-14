@@ -3,6 +3,7 @@ import { execFile } from "child_process";
 import { existsSync, promises as fsp } from "fs";
 import { AllumeError, AllumeMcp, friendlyError } from "./allume";
 import { resultPayload } from "./cards";
+import { redact } from "./redact";
 import { DEFAULT_SETTINGS, HELPER_CANDIDATES, LEDGER_CAP, type AllumeInboxSettings } from "./settings";
 import { runSync, type Ledger, type SyncOptions, type SyncReport, type VaultIO } from "./sync";
 import { AllumeInboxSettingTab, BoardPickerModal, TextModal } from "./ui";
@@ -119,6 +120,13 @@ export default class AllumeInboxPlugin extends Plugin {
   log(line: string): void {
     if (!this.settings.debugLog) return;
     this.logLines.push(`${moment().format("YYYY-MM-DD HH:mm:ss")} ${line}`);
+  }
+
+  async deleteDebugLog(): Promise<void> {
+    this.logLines = [];
+    if (!this.manifest.dir) return;
+    const path = normalizePath(`${this.manifest.dir}/debug.log`);
+    if (await this.app.vault.adapter.exists(path)) await this.app.vault.adapter.remove(path);
   }
 
   /** Write buffered log lines to <plugin folder>/debug.log, keeping it under ~1 MB. */
@@ -449,12 +457,12 @@ export default class AllumeInboxPlugin extends Plugin {
           }
           out.inbox = { name: this.settings.inboxBoardName, id: this.settings.inboxBoardId };
           try {
-            out.search_for_name = truncate(await api.search(this.settings.inboxBoardName || "Inbox", 20));
+            out.search_for_name = await api.search(this.settings.inboxBoardName || "Inbox", 20);
           } catch (e) {
             out.search_error = (e as Error).message;
           }
           try {
-            out.list_workspaces = truncate(resultPayload(await api.call("list_workspaces", {})));
+            out.list_workspaces = resultPayload(await api.call("list_workspaces", {}));
           } catch (e) {
             out.list_workspaces_error = (e as Error).message;
           }
@@ -476,13 +484,14 @@ export default class AllumeInboxPlugin extends Plugin {
           const sample = [];
           for (const c of cards.filter((x) => x.kind !== "board").slice(0, 3)) {
             const a = api.cardContentArgs(c.id);
-            sample.push({ card: c.id, args: a, result: truncate(resultPayload(await api.call("card_content", a))) });
+            sample.push({ card: c.id, args: a, result: resultPayload(await api.call("card_content", a)) });
           }
           out.card_content_samples = sample;
         }
-        return JSON.stringify(out, null, 2);
+        const { plugin, server, tools, ...found } = out;
+        return JSON.stringify({ plugin, server, tools, ...(redact(found) as Record<string, unknown>) }, null, 2);
       });
-      new TextModal(this.app, "Raw Allume responses", text).open();
+      new TextModal(this.app, "Allume responses (card text hidden)", text).open();
     } catch (e) {
       this.notifyError(friendlyError(e), 10_000);
     }
@@ -502,10 +511,4 @@ export default class AllumeInboxPlugin extends Plugin {
   private notifyError(err: AllumeError, timeout: number): void {
     new Notice(`Allume Inbox: ${err.message}${err.hint ? `\n${err.hint}` : ""}`, timeout);
   }
-}
-
-function truncate(v: unknown): unknown {
-  const s = JSON.stringify(v);
-  if (s && s.length > 4000) return `${s.slice(0, 4000)}… (${s.length} chars)`;
-  return v;
 }
